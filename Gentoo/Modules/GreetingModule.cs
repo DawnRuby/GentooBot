@@ -40,7 +40,7 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
     internal static async Task<List<User>> GetUsersByRankAsync(SQLiteContext context)
     {
         var users = await context.Users.ToListAsync();
-        users.Sort(new Comparison<User>((user1, user2) => user1.TotalCommits.CompareTo(user2.TotalCommits)));
+        users.Sort(new Comparison<User>((user1, user2) => user2.TotalCommits.CompareTo(user1.TotalCommits)));
         return users;
     }
     
