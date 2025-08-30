@@ -11,14 +11,10 @@ namespace Gentoo.Modules;
 
 public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext>
 {
-    [SlashCommand("leaderboard", "Gets the leaderboard of the month")]
+    [SlashCommand("leaderboard", "Gets the leaderboard of the month", 
+        Contexts = [InteractionContextType.Guild])]
     public async Task<string> Leaderboard()
     {
-        if (Context.Guild == null)
-        {
-            return "You can only use this command in a guild context";
-        }
-        
         var context = new SQLiteContext();
         var users = await GetUsersByRankMonthAsync(context);
         var guild = await Context.Guild.GetAsync();
@@ -38,14 +34,10 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
     }
     
     
-    [SlashCommand("alltimeleaderboard", "Gets the leaderboard of the month")]
+    [SlashCommand("alltimeleaderboard", "Gets the leaderboard of the month", 
+        Contexts = [InteractionContextType.Guild])]
     public async Task<string> AllTimeLeaderboard()
     {
-        if (Context.Guild == null)
-        {
-            return "You can only use this command in a guild context";
-        }
-        
         var context = new SQLiteContext();
         var users = await context.Users.ToListAsync();
         users.Sort(new Comparison<User>((user1, user2) => user2.OverallCommits.CompareTo(user1.OverallCommits)));
@@ -72,7 +64,8 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
         return users;
     }
     
-    [SlashCommand("register", "Registers you into the commit challange on discord")]
+    [SlashCommand("register", "Registers you into the commit challange on discord", 
+        Contexts = [InteractionContextType.Guild])]
     public async Task<string> Register(string githubUsername, string gentooContribName)
     {
         SQLiteContext context = new SQLiteContext();
@@ -102,7 +95,8 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
         return "Thanks for signing up, updates run every half hour :)";
     }
 
-    [SlashCommand("getrank", "Gets your current rank from the last update")]
+    [SlashCommand("getrank", "Gets your current rank from the last update", 
+        Contexts = [InteractionContextType.Guild])]
     public async Task<string> GetRank()
     {
         var context = new SQLiteContext();
@@ -122,14 +116,28 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
         return $"Your current rank is {rank + 1} of {users.Count}. The Last update was done {(DateTime.Now - Program.LastUpdate).TotalMinutes} minutes ago.";
     }
     
-    [SlashCommand("unlink", "Checks if the database exists")]
+    [SlashCommand("unlink", "Unlinks your account",  
+    Contexts = [InteractionContextType.Guild])]
+    public async Task<string> Unlink() 
+    {
+        var context = new SQLiteContext();
+        var dbUser = context.Users.FirstOrDefault(x => x.DiscordUserId == Context.User.Id);
+        if (dbUser == null)
+        {
+            return "We don't have you in our database";
+        }
+        
+        context.Users.Remove(dbUser);
+        await context.SaveChangesAsync();
+
+        return "Unlinked user, deleted your data :)";
+    }
+    
+    [SlashCommand("unlink", "Unlinks a users account",     
+        DefaultGuildUserPermissions = Permissions.ManageGuild,
+    Contexts = [InteractionContextType.Guild])]
     public async Task<string> UnlinkUser(NetCord.User user) 
     {
-        if (Context.User.Username is not ("immolo" or "dawnruby"))
-        {
-            return "You don't have permission to do that.";
-        }
-
         var context = new SQLiteContext();
         var dbUser = context.Users.FirstOrDefault(x => x.DiscordUserId == user.Id);
         if (dbUser == null)
@@ -143,14 +151,11 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
         return "Unlinked user";
     }
     
-    [SlashCommand("userinfo", "Checks if the database exists")]
+    [SlashCommand("userinfo", "Gets the information of a user",     
+        DefaultGuildUserPermissions = Permissions.ManageGuild,
+    Contexts = [InteractionContextType.Guild])]
     public async Task<string> UserInfo(NetCord.User user) 
     {
-        if (Context.User.Username is not ("immolo" or "dawnruby"))
-        {
-            return "You don't have permission to do that.";
-        }
-        
         SQLiteContext context = new SQLiteContext();
         var contributorInformation = context.Users.FirstOrDefault(x => x.DiscordUserId == user.Id);
         if (user == null)
@@ -161,14 +166,11 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
         return $"Users github: {contributorInformation.GithubUsername}, Users Gentoo Username: {contributorInformation.GentooUsername}";
     }
     
-    [SlashCommand("checkdb", "Checks if the database exists")]
+    [SlashCommand("checkdb", "Checks if the database exists", 
+    DefaultGuildUserPermissions = Permissions.ManageGuild,
+    Contexts = [InteractionContextType.Guild])]
     public async Task<string> CheckDatabaseStatus() 
     {
-        if (Context.User.Username is not ("immolo" or "dawnruby"))
-        {
-            return "You don't have permission to do that.";
-        }
-        
         SQLiteContext context = new SQLiteContext();
         if ((await context.Database.GetPendingMigrationsAsync()).Any())
         {

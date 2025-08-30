@@ -20,6 +20,12 @@ public class Program
 {
     public static DateTime LastUpdate;
     private static System.Timers.Timer UpdateTimer;
+#if DEBUG
+    public const ulong LoggingChannelId = 1411474180939059361;
+#else
+    public const ulong LoggingChannelId = 0;
+#endif
+    
     
     public static GitHubClient GitHub
     {
