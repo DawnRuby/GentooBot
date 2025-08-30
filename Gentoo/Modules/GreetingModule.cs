@@ -20,7 +20,7 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
         }
         
         var context = new SQLiteContext();
-        var users = await GetUsersByRankAsync(context);
+        var users = await GetUsersByRankMonthAsync(context);
         var guild = await Context.Guild.GetAsync();
         
         var returnString = $"**Top 10 Wiki & PR commits to Gentoo for {DateTime.Now.ToString("MMMM", CultureInfo.InvariantCulture)}**\n\n";
@@ -30,17 +30,45 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
             var user = users[i];
             
             var discordUser = await guild.GetUserAsync(user.DiscordUserId);
-            returnString += $"**{i + 1}.** - {discordUser.Username} - Commit Count: {user.TotalCommits}";
+            returnString += $"**{i + 1}.** - {discordUser.Username} - Commit Count: {user.TotalCommitsMonth}";
             returnString += "\n";
         }
         
         return returnString;
     }
     
-    internal static async Task<List<User>> GetUsersByRankAsync(SQLiteContext context)
+    
+    [SlashCommand("alltimeleaderboard", "Gets the leaderboard of the month")]
+    public async Task<string> AllTimeLeaderboard()
+    {
+        if (Context.Guild == null)
+        {
+            return "You can only use this command in a guild context";
+        }
+        
+        var context = new SQLiteContext();
+        var users = await context.Users.ToListAsync();
+        users.Sort(new Comparison<User>((user1, user2) => user2.OverallCommits.CompareTo(user1.OverallCommits)));
+        var guild = await Context.Guild.GetAsync();
+        
+        var returnString = $"**Top 10 Wiki & PR commits to Gentoo in all time**\n\n";
+        for (var i = 0; i < users.Count; i++)
+        {
+            if (i >= 10) { break; }
+            var user = users[i];
+            
+            var discordUser = await guild.GetUserAsync(user.DiscordUserId);
+            returnString += $"**{i + 1}.** - {discordUser.Username} - Commit Count: {user.OverallCommits}";
+            returnString += "\n";
+        }
+        
+        return returnString;
+    }
+    
+    internal static async Task<List<User>> GetUsersByRankMonthAsync(SQLiteContext context)
     {
         var users = await context.Users.ToListAsync();
-        users.Sort(new Comparison<User>((user1, user2) => user2.TotalCommits.CompareTo(user1.TotalCommits)));
+        users.Sort(new Comparison<User>((user1, user2) => user2.TotalCommitsMonth.CompareTo(user1.TotalCommitsMonth)));
         return users;
     }
     
@@ -60,34 +88,18 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
         }
         
         var errors = string.Empty;
-        var commits = 0;
-        //Get our commits and combine them :)
-        try {
-            commits += CommitMonitoring.GetGentooWikiCommits(gentooContribName).Result;
-        }
-        catch (Exception) {
-            return "We could not link your gentoo wiki account, please make sure your username is correct";
-        }
-
-        try {
-            commits += CommitMonitoring.GetGitHubCommits(githubUsername).Result;
-        }
-        catch (Exception e) {
-            return "We could not link your GitHub account, please make sure your username is correct";
-        }
         
         await context.Users.AddAsync(new User()
         {
             DiscordUserId = Context.User.Id,
             GithubUsername = githubUsername,
             GentooUsername = gentooContribName,
-            DiscordUsername = Context.User.Username,
-            TotalCommits = commits
+            DiscordUsername = Context.User.Username
         });
         
         await context.SaveChangesAsync();
         
-        return "Thanks for signing up, judging by your last commits you're currently placed <null>";
+        return "Thanks for signing up, updates run every half hour :)";
     }
 
     [SlashCommand("getrank", "Gets your current rank from the last update")]
@@ -99,7 +111,7 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
             return "You are not yet registered please use the Register command to register";
         }
 
-        var users = await GetUsersByRankAsync(context);
+        var users = await GetUsersByRankMonthAsync(context);
         var ourUser = users.FirstOrDefault(x => x.DiscordUserId == Context.User.Id);
         if (ourUser == null)
         {
@@ -129,6 +141,24 @@ public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext
         await context.SaveChangesAsync();
 
         return "Unlinked user";
+    }
+    
+    [SlashCommand("userinfo", "Checks if the database exists")]
+    public async Task<string> UserInfo(NetCord.User user) 
+    {
+        if (Context.User.Username is not ("immolo" or "dawnruby"))
+        {
+            return "You don't have permission to do that.";
+        }
+        
+        SQLiteContext context = new SQLiteContext();
+        var contributorInformation = context.Users.FirstOrDefault(x => x.DiscordUserId == user.Id);
+        if (user == null)
+        {
+            return "User does not exist in our database";
+        }
+
+        return $"Users github: {contributorInformation.GithubUsername}, Users Gentoo Username: {contributorInformation.GentooUsername}";
     }
     
     [SlashCommand("checkdb", "Checks if the database exists")]

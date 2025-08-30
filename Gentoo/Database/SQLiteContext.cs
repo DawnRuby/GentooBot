@@ -36,7 +36,12 @@ public class User
     /// <summary>
     /// The total commits for the month
     /// </summary>
-    public int TotalCommits { get; set; }
+    public int TotalCommitsMonth { get; set; }
+    
+    /// <summary>
+    /// ALL commits for the user.
+    /// </summary>
+    public int OverallCommits { get; set; }
     
     /// <summary>
     /// The Name of the discord user

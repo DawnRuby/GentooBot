@@ -5,25 +5,34 @@ namespace Gentoo.Functions;
 
 public class CommitMonitoring
 {
-    public static async Task<int> GetGitHubCommits(string ghusername)
+    private static DateTimeOffset monthOffset =
+        new DateTimeOffset(new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1, 0, 0, 0, DateTimeKind.Utc));  
+    
+    
+    public static async Task<int> GetGitHubCommits(string ghusername, DateTimeOffset? offset = null)
     {
-        var repo = await Program.GitHub.Repository.Get("gentoo", "gentoo");
-
-
+        if (offset == null)
+        {
+            offset = monthOffset;
+        }
+        
         var commitRequestFilter = new CommitRequest()
         {
             Author = ghusername,
-            Since = new DateTimeOffset(
-                new DateTime(DateTime.Now.Year, DateTime.Now.Month, 1, 0, 0, 0, DateTimeKind.Utc))
+            Since = offset
         };
         
         var commits = await Program.GitHub.Repository.Commit.GetAll("gentoo", "gentoo", commitRequestFilter);
-        return commits.Count(commit => commit.Author.Login == ghusername);
+        return commits.Count();
     }
 
-    public static async Task<int> GetGentooWikiCommits(string username)
+    public static async Task<int> GetGentooWikiCommits(string username, DateTimeOffset? offset = null)
     {
-        var webSite = $"https://wiki.gentoo.org/index.php?title=Special:Contributions/{username}&offset=&limit=1000&target={username}";
+        if (offset == null) {
+            offset = monthOffset;
+        }
+        
+        var webSite = $"https://wiki.gentoo.org/index.php?title=Special:Contributions/{username}&offset=&limit=1000000&target={username}";
         HtmlWeb web = new HtmlWeb();
         var htmlDoc = await web.LoadFromWebAsync(webSite);
         var node = htmlDoc.DocumentNode.Descendants(0).Where(x => x.HasClass("mw-contributions-list"));
@@ -33,7 +42,7 @@ public class CommitMonitoring
             var textArray = children.InnerText.Split('\n');
             DateTime.TryParse(textArray[0], out DateTime dateTime);
             
-            if (dateTime.Month == DateTime.Now.Month && dateTime.Year == DateTime.Now.Year) {
+            if (dateTime > offset) {
                 contribCount++;
             }
         }
