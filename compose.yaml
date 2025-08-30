@@ -1,0 +1,7 @@
+﻿services:
+  gentoo:
+    image: gentoo
+    build:
+      context: .
+      dockerfile: Gentoo/Dockerfile
+
