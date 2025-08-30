@@ -1,47 +1,150 @@
+using System.Globalization;
 using Gentoo.Database;
 using Gentoo.Functions;
+using Microsoft.EntityFrameworkCore;
 using NetCord;
 using NetCord.Services.ApplicationCommands;
+using Octokit;
+using User = Gentoo.Database.User;
 
 namespace Gentoo.Modules;
 
 public class GreetingModule : ApplicationCommandModule<ApplicationCommandContext>
 {
-    [SlashCommand("register", "Registers you into the commit challange on discord")]
-    public async Task<string> Register(User user, string githubUsername, string gentooContribName)
+    [SlashCommand("leaderboard", "Gets the leaderboard of the month")]
+    public async Task<string> Leaderboard()
     {
-        PgSQLContext context = new PgSQLContext();
-        if (context.Users.Any(x => x.Id == user.Id))
+        if (Context.Guild == null)
+        {
+            return "You can only use this command in a guild context";
+        }
+        
+        var context = new SQLiteContext();
+        var users = await GetUsersByRankAsync(context);
+        var guild = await Context.Guild.GetAsync();
+        
+        var returnString = $"**Top 10 Wiki & PR commits to Gentoo for {DateTime.Now.ToString("MMMM", CultureInfo.InvariantCulture)}**\n\n";
+        for (var i = 0; i < users.Count; i++)
+        {
+            if (i >= 10) { break; }
+            var user = users[i];
+            
+            var discordUser = await guild.GetUserAsync(user.DiscordUserId);
+            returnString += $"**{i + 1}.** - {discordUser.Username} - Commit Count: {user.TotalCommits}";
+            returnString += "\n";
+        }
+        
+        return returnString;
+    }
+    
+    internal static async Task<List<User>> GetUsersByRankAsync(SQLiteContext context)
+    {
+        var users = await context.Users.ToListAsync();
+        users.Sort(new Comparison<User>((user1, user2) => user1.TotalCommits.CompareTo(user2.TotalCommits)));
+        return users;
+    }
+    
+    [SlashCommand("register", "Registers you into the commit challange on discord")]
+    public async Task<string> Register(string githubUsername, string gentooContribName)
+    {
+        SQLiteContext context = new SQLiteContext();
+        if (context.Users.Any(x => x.DiscordUserId == Context.User.Id))
         {
             return "You already linked your account. Stop cheating :3";
         }
-        
-        
-        await context.Users.AddAsync(new Contributor()
+
+        if (context.Users.Any(x => x.GithubUsername == githubUsername || x.GentooUsername == gentooContribName))
         {
-            Id = user.Id,
-            LastUpdate = DateTime.UtcNow,
-            GithubUsername = githubUsername,
-            ContributionURL = gentooContribName,
-            Name = user.Username
-        });
-        await context.SaveChangesAsync();
+            return "There is already an account linked to your github or gentoo username. " +
+                   "If someone else claimed it please let moderators know to remove it.";
+        }
         
+        var errors = string.Empty;
+        var commits = 0;
         //Get our commits and combine them :)
-        var commits = CommitMonitoring.GetGentooWikiCommits(gentooContribName).Result;
-        var ghCommits = CommitMonitoring.GetGitHubCommits(githubUsername).Result;
-        var overallCommits = commits + ghCommits;
-        var rank = context.Ranks.FirstOrDefault(x => x.Commits < overallCommits);
+        try {
+            commits += CommitMonitoring.GetGentooWikiCommits(gentooContribName).Result;
+        }
+        catch (Exception) {
+            return "We could not link your gentoo wiki account, please make sure your username is correct";
+        }
+
+        try {
+            commits += CommitMonitoring.GetGitHubCommits(githubUsername).Result;
+        }
+        catch (Exception e) {
+            return "We could not link your GitHub account, please make sure your username is correct";
+        }
+        
+        await context.Users.AddAsync(new User()
+        {
+            DiscordUserId = Context.User.Id,
+            GithubUsername = githubUsername,
+            GentooUsername = gentooContribName,
+            DiscordUsername = Context.User.Username,
+            TotalCommits = commits
+        });
+        
+        await context.SaveChangesAsync();
         
         return "Thanks for signing up, judging by your last commits you're currently placed <null>";
     }
+
+    [SlashCommand("getrank", "Gets your current rank from the last update")]
+    public async Task<string> GetRank()
+    {
+        var context = new SQLiteContext();
+        if (!context.Users.Any(x => x.DiscordUserId == Context.User.Id))
+        {
+            return "You are not yet registered please use the Register command to register";
+        }
+
+        var users = await GetUsersByRankAsync(context);
+        var ourUser = users.FirstOrDefault(x => x.DiscordUserId == Context.User.Id);
+        if (ourUser == null)
+        {
+            return "You are not yet registered please use the Register command to register";
+        }
+        
+        var rank = users.IndexOf(ourUser);
+        return $"Your current rank is {rank + 1} of {users.Count}. The Last update was done {(DateTime.Now - Program.LastUpdate).TotalMinutes} minutes ago.";
+    }
     
+    [SlashCommand("unlink", "Checks if the database exists")]
+    public async Task<string> UnlinkUser(NetCord.User user) 
+    {
+        if (Context.User.Username is not ("immolo" or "dawnruby"))
+        {
+            return "You don't have permission to do that.";
+        }
+
+        var context = new SQLiteContext();
+        var dbUser = context.Users.FirstOrDefault(x => x.DiscordUserId == user.Id);
+        if (dbUser == null)
+        {
+            return "User does not exist in our database";
+        }
+        
+        context.Users.Remove(dbUser);
+        await context.SaveChangesAsync();
+
+        return "Unlinked user";
+    }
     
     [SlashCommand("checkdb", "Checks if the database exists")]
-    public string CheckDatabaseStatus() 
+    public async Task<string> CheckDatabaseStatus() 
     {
-        PgSQLContext context = new PgSQLContext();
-        var created = context.Database.EnsureCreated();
-        return created.ToString();
+        if (Context.User.Username is not ("immolo" or "dawnruby"))
+        {
+            return "You don't have permission to do that.";
+        }
+        
+        SQLiteContext context = new SQLiteContext();
+        if ((await context.Database.GetPendingMigrationsAsync()).Any())
+        {
+            await context.Database.MigrateAsync();    
+        }
+
+        return "Database is up to date";
     }
 }

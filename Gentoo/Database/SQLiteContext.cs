@@ -1,11 +1,15 @@
+using System.ComponentModel.DataAnnotations;
 using System.Data.Common;
 using Microsoft.EntityFrameworkCore;
+using NetCord.Gateway;
+using Newtonsoft.Json;
 
 namespace Gentoo.Database;
 
 public class SQLiteContext : DbContext
 {
-    private DbSet<User> Users { get; set; }
+    internal DbSet<User> Users { get; set; }
+    internal DbSet<PreviousWinners> PreviousWinner { get; set; }
     
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
     {
@@ -13,11 +17,20 @@ public class SQLiteContext : DbContext
     }
 }
 
+public class PreviousWinners
+{
+    [Key]
+    public long MonthId { get; set; }
+    
+    public string UserRankings { get; set; }
+}
+
 public class User
 {
     /// <summary>
     /// The Discord User Id
     /// </summary>
+    [Key]
     public ulong DiscordUserId { get; set; }
  
     /// <summary>
@@ -31,7 +44,7 @@ public class User
     public string DiscordUsername { get; set; }
     
     /// <summary>
-    /// The users github name
+    /// The users GitHub name
     /// </summary>
     public string GithubUsername { get; set; }
     
